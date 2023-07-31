@@ -117,6 +117,7 @@ public class State
     protected int _animIDJump;
     protected int _animIDFreeFall;
     protected int _animIDMotionSpeed;
+    protected int _animIDStumble;
     #endregion
 
     #region GamePlayNeeded
@@ -126,6 +127,7 @@ public class State
     // 玩家是否能操作 or 等某些动画完成后才可操作
     protected bool CanMove = true;
     protected bool IsStumble = false;
+    protected int AnimationStumbleFinish = 0;
     #endregion
     
     // 构造函数
@@ -160,7 +162,7 @@ public class State
         VariablesTrack();
         GroundedCheck();
         CameraRotation();
-        if (CanMove)
+        if (!IsStumble)
         {
             Move();
         }
@@ -199,7 +201,7 @@ public class State
         animator.SetBool(_animIDGrounded, Grounded);
     }
     
-    // 位置移动脚本
+    // 移动脚本的封装
     protected void Move()
     {
         float targetSpeed = inputs.sprint ? SprintSpeed : MoveSpeed;
@@ -259,6 +261,7 @@ public class State
         animator.SetFloat(_animIDSpeed, _animationBlend);
         animator.SetFloat(_animIDMotionSpeed, inputMagnitude);
     }
+    // 
     protected void StumbleMove()
     {
         if (!Grounded)
@@ -319,8 +322,7 @@ public class State
                          new Vector3(0.0f, _verticalVelocity, 0.0f) * Time.deltaTime);
 
         // blendtree 相关的动画内容
-        animator.SetFloat(_animIDSpeed, _animationBlend);
-        animator.SetFloat(_animIDMotionSpeed, inputMagnitude);
+        animator.SetBool(_animIDStumble, IsStumble);
     }
     
     // 相机旋转相关
@@ -363,6 +365,7 @@ public class State
         _animIDJump = Animator.StringToHash("Jump");
         _animIDFreeFall = Animator.StringToHash("FreeFall");
         _animIDMotionSpeed = Animator.StringToHash("MotionSpeed");
+        _animIDStumble = Animator.StringToHash("Stumble");
     }
     
     // 参数传值
@@ -373,6 +376,7 @@ public class State
             Player = player.gameObject.GetComponent<Player>();
         }
         IsCollision = Player._isCollision;
+        AnimationStumbleFinish = Player._AnimationStumbleFinish;
         //Debug.Log("<color=blue> [MSG] </color> IsCollision = "+ IsCollision);
     }
 }
@@ -546,7 +550,6 @@ public class FreeFall : State
     }
 }
 
-
 public class StumbleMove : State
 {
     public StumbleMove( StarterAssetsInputs _inputs, GameObject _cinemachineCameraTarget,
@@ -563,18 +566,28 @@ public class StumbleMove : State
     {
         base.Enter();
         Debug.Log("<color=yellow> [MSG] </color> States = " + name);
-        CanMove = false;
+        IsStumble = true;
     }
 
     public override void Update()
     {
         base.Update();
-        
+        if (AnimationStumbleFinish == 1) // 且动画播放完毕
+        {
+            //Debug.Log("<color=yellow> 趔趄动画播放完毕 </color>");
+            IsStumble = false;
+            animator.SetBool(_animIDStumble, IsStumble);
+            
+            nextState = new BlendTreeMove(inputs,CinemachineCameraTarget,player,animator,mainCamera,playerInput,
+                controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers);
+            stage = Event.Exit;
+        }
     }
     
     public override void Exit() 
     {
         base.Exit();
+        Player._AnimationStumbleFinish = 0;
     }
 }
 

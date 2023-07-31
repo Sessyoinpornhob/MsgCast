@@ -31,6 +31,9 @@ public class Player : MonoBehaviour
     public LayerMask _GroundLayers;
     public bool _isCollision = false;
 
+    [Header("动画系统回调参数")] 
+    public int _AnimationStumbleFinish = 0;
+
     private void Awake()
     {
         if (_mainCamera == null)
@@ -74,5 +77,16 @@ public class Player : MonoBehaviour
         }
         Debug.Log("<color=yellow>[MSG] </color> IsCollision = "+ _isCollision);
     }
+    #endregion
+
+    #region Animation CallBack
+    // 动画片段完成后，回调Event函数，改变某些参数。
+    public void CallBack_AnimationStumbleFinish()
+    {
+        _AnimationStumbleFinish = 1;
+        Debug.Log("_AnimationStumbleFinish = " + _AnimationStumbleFinish);
+    }
+    
+
     #endregion
 }
