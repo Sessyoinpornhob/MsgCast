@@ -4,12 +4,24 @@ using UnityEngine;
 
 public class MeshCollision : MonoBehaviour
 {
-    private void OnCollisionEnter(Collision collision)
+    void OnControllerColliderHit(ControllerColliderHit hit)
     {
-        Debug.Log ("**** collision.gameObject.name***:" + collision.gameObject.name);
-        if(collision.gameObject.name == "Player")
+        Rigidbody body = hit.collider.attachedRigidbody;
+        if(body == null || body.isKinematic)
         {
-            Debug.Log("fine");
+            return;
         }
-    }
+        else
+        {
+            Debug.Log("touch gameObject： " + hit.collider.gameObject.name);
+                
+            //摧毁物体
+            //Destroy(hit.collider.gameObject);
+        
+            //给物体一个移动的力
+            //body.velocity = new Vector3(hit.moveDirection.x,0,hit.moveDirection.z) * 30.0f;
+                
+            // todo: 改变某个变量，改变状态，记录平衡值，执行失去平衡动画。
+        }
+    } 
 }

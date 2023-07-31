@@ -27,7 +27,9 @@ public class Player : MonoBehaviour
     private float _cinemachineTargetYaw;
     private float _cinemachineTargetPitch;
 
-    [Header("碰撞相关")] public LayerMask _GroundLayers;
+    [Header("碰撞相关")]
+    public LayerMask _GroundLayers;
+    public bool _isCollision = false;
 
     private void Awake()
     {
@@ -45,11 +47,32 @@ public class Player : MonoBehaviour
 
 
         // 状态注册
-        currentState = new Idle(_input,_cinemachineCameraTarget,_player,_animator,_mainCamera,_playerInput,_controller,
+        currentState = new BlendTreeMove(_input,_cinemachineCameraTarget,_player,_animator,_mainCamera,_playerInput,_controller,
                                 _cinemachineTargetYaw,_cinemachineTargetPitch,_GroundLayers);
     }
     
     void Update() {
         currentState = currentState.Process();
     }
+
+    #region 碰撞部分函数
+    // 碰撞部分的函数
+    private void OnCollisionEnter(Collision collision)
+    {
+        if (!_isCollision)
+        {
+            _isCollision = !_isCollision;
+        }
+        Debug.Log("<color=yellow>[MSG] </color> IsCollision = "+ _isCollision);
+    }
+
+    private void OnCollisionExit(Collision other)
+    {
+        if (_isCollision)
+        {
+            _isCollision = !_isCollision;
+        }
+        Debug.Log("<color=yellow>[MSG] </color> IsCollision = "+ _isCollision);
+    }
+    #endregion
 }
