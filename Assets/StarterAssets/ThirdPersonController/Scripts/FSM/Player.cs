@@ -7,8 +7,9 @@ using UnityEngine.InputSystem;
 
 public class Player : MonoBehaviour
 {
+    public static Player Instance;
     // FSM 相关
-    State currentState;
+    private State currentState;
     
     [Header("主要引用")]
     public Transform _player;
@@ -29,17 +30,23 @@ public class Player : MonoBehaviour
 
     [Header("碰撞相关")]
     public LayerMask _GroundLayers;
-    public bool _isCollision = false;
+    [Tooltip("State.cs 关注的变量")] public bool _isCollision = false;
 
-    [Header("动画系统回调参数")] 
-    public int _AnimationStumbleFinish = 0;
+    [Header("动画系统回调参数")]
+    [Tooltip("State.cs 关注的变量")] public int _AnimationStumbleFinish = 0;
+    [Tooltip("State.cs 关注的变量")] public int _AnimationFallDownFinish = 0;
+    private float _stamina = 100f;   // 最初的_stamina
 
     private void Awake()
     {
         if (_mainCamera == null)
-        {
             _mainCamera = GameObject.FindGameObjectWithTag("MainCamera");
-        }
+
+        if (Instance == null)
+            Instance = this;
+        else
+            Destroy(Instance);
+
     }
 
     private void Start() {
@@ -51,7 +58,8 @@ public class Player : MonoBehaviour
 
         // 状态注册
         currentState = new BlendTreeMove(_input,_cinemachineCameraTarget,_player,_animator,_mainCamera,_playerInput,_controller,
-                                _cinemachineTargetYaw,_cinemachineTargetPitch,_GroundLayers);
+                                _cinemachineTargetYaw,_cinemachineTargetPitch,_GroundLayers,_stamina);
+        
     }
     
     void Update() {
@@ -86,7 +94,10 @@ public class Player : MonoBehaviour
         _AnimationStumbleFinish = 1;
         Debug.Log("_AnimationStumbleFinish = " + _AnimationStumbleFinish);
     }
-    
-
+    public void CallBack_AnimationFallDownFinish()
+    {
+        _AnimationFallDownFinish = 1;
+        Debug.Log("_AnimationFallDownFinish = " + _AnimationFallDownFinish);
+    }
     #endregion
 }

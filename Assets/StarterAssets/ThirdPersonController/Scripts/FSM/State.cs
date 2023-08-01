@@ -19,8 +19,7 @@ public class State
         FreeFall,
         StumbleMove,
         HoldBalance,
-        FallDown,
-        GetUp,
+        FallDownAndGetUp,
         PickUpItem
     };
 
@@ -43,7 +42,7 @@ public class State
     protected CharacterController controller;
     protected StarterAssetsInputs inputs;
     protected const float threshold = 0.01f;
-    public Player Player = null;
+    //public Player Player = null;
     
 
     #region const 参数
@@ -51,7 +50,7 @@ public class State
     // 玩家走路速度
     protected float MoveSpeed = 2.0f;
     // 玩家跑步速度
-    protected float SprintSpeed = 5.335f;
+    protected float SprintSpeed = 5.5f;
     // 玩家转向速度
     protected float RotationSmoothTime = 0.12f;
     // 加速减速
@@ -118,6 +117,7 @@ public class State
     protected int _animIDFreeFall;
     protected int _animIDMotionSpeed;
     protected int _animIDStumble;
+    protected int _animIDFallDown;
     #endregion
 
     #region GamePlayNeeded
@@ -127,14 +127,24 @@ public class State
     // 玩家是否能操作 or 等某些动画完成后才可操作
     protected bool CanMove = true;
     protected bool IsStumble = false;
+    protected bool IsFallDown = false;
     protected int AnimationStumbleFinish = 0;
+    protected int AnimationFallDownFinish = 0;
+    // 耐力值
+    public float StaminaMax = 100;
+    public float Stamina = 100;
+    private float _staminaChangeDelta = 0.1f;
+    private float _staminaAddRate = 0.9f;
+    private float _staminaReduceRate = 0.5f;
+    // 耐力阈值：用于判定是蹒跚or摔倒
+    protected float _staminaBoundary = 50f;
     #endregion
     
     // 构造函数
     public State( StarterAssetsInputs _inputs, GameObject _cinemachineCameraTarget,
                 Transform _player, Animator _animator, GameObject _mainCamera,
                 PlayerInput _playerInput, CharacterController _controller,
-                float passedInCinemachineTargetYaw, float passedInCinemachineTargetPitch, LayerMask groundLayers)
+                float passedInCinemachineTargetYaw, float passedInCinemachineTargetPitch, LayerMask groundLayers, float stamina)
     {
         // Player.cs 中的引用变量通过函数转换到 State.cs 的 protected 引用变量中
         stage = Event.Enter;
@@ -148,6 +158,7 @@ public class State
         _cinemachineTargetYaw = passedInCinemachineTargetYaw;
         _cinemachineTargetPitch = passedInCinemachineTargetPitch;
         GroundLayers = groundLayers;
+        Stamina = stamina;
     }
 
     public virtual void Enter()
@@ -165,6 +176,7 @@ public class State
         if (!IsStumble)
         {
             Move();
+            ManageStamina();
         }
         else
         {
@@ -204,6 +216,12 @@ public class State
     // 移动脚本的封装
     protected void Move()
     {
+        // Stamina and Speed
+        if (Stamina < 10f)
+            SprintSpeed = 2f;
+        else
+            SprintSpeed = 5.5f;
+        
         float targetSpeed = inputs.sprint ? SprintSpeed : MoveSpeed;
         if (inputs.move == Vector2.zero) targetSpeed = 0.0f;
 
@@ -261,13 +279,17 @@ public class State
         animator.SetFloat(_animIDSpeed, _animationBlend);
         animator.SetFloat(_animIDMotionSpeed, inputMagnitude);
     }
-    // 
+    
+    // 趔趄状态下的移动
     protected void StumbleMove()
     {
+        
         if (!Grounded)
         {
             _verticalVelocity = Gravity * 0.1f;
         }
+        
+        // SprintSpeed = MoveSpeed = 1f;
         float targetSpeed = inputs.sprint ? SprintSpeed : MoveSpeed;
         if (inputs.move == Vector2.zero) targetSpeed = 0.0f;
 
@@ -328,8 +350,6 @@ public class State
     // 相机旋转相关
     protected void CameraRotation()
     {
-        // 转换 State 的时候需要将 CameraRotation 的角度临时记录并应用在下一个 State
-
         // if there is an input and camera position is not fixed
         if (inputs.look.sqrMagnitude >= threshold && !LockCameraPosition)
         {
@@ -349,7 +369,13 @@ public class State
             _cinemachineTargetYaw, 0.0f);
     }
     
-    // ClampAngle 角度
+    /// <summary>
+    /// 将输入角度clamp在最大值和最小值之间
+    /// </summary>
+    /// <param name="lfAngle"></param>
+    /// <param name="lfMin"></param>
+    /// <param name="lfMax"></param>
+    /// <returns></returns>
     private static float ClampAngle(float lfAngle, float lfMin, float lfMax)
     {
         if (lfAngle < -360f) lfAngle += 360f;
@@ -366,19 +392,36 @@ public class State
         _animIDFreeFall = Animator.StringToHash("FreeFall");
         _animIDMotionSpeed = Animator.StringToHash("MotionSpeed");
         _animIDStumble = Animator.StringToHash("Stumble");
+        _animIDFallDown = Animator.StringToHash("FallDown");
     }
     
-    // 参数传值
+    /// <summary>
+    /// 从 Player.cs 持续性获取一些变量, 同时将某些变量赋值到对应单例脚本
+    /// </summary>
     protected void VariablesTrack()
     {
-        if (!Player)
-        {
-            Player = player.gameObject.GetComponent<Player>();
-        }
-        IsCollision = Player._isCollision;
-        AnimationStumbleFinish = Player._AnimationStumbleFinish;
+        IsCollision = Player.Instance._isCollision;
+        AnimationStumbleFinish = Player.Instance._AnimationStumbleFinish;
+        AnimationFallDownFinish = Player.Instance._AnimationFallDownFinish;
         //Debug.Log("<color=blue> [MSG] </color> IsCollision = "+ IsCollision);
+        UIManager.Instance.staminaNum = Stamina;
     }
+    
+    /// <summary>
+    /// 增减耐力值。
+    /// </summary>
+    protected virtual void ManageStamina()
+    {
+        if (inputs.sprint && inputs.move != Vector2.zero && Stamina > 0.5f)
+        {
+            Stamina -= _staminaChangeDelta * _staminaReduceRate;
+        }
+        else if (!inputs.sprint && Stamina < StaminaMax-0.5f)
+        {
+            Stamina += _staminaChangeDelta * _staminaAddRate;
+        }
+    }
+    
 }
 
 public class BlendTreeMove : State
@@ -386,9 +429,9 @@ public class BlendTreeMove : State
     public BlendTreeMove( StarterAssetsInputs _inputs, GameObject _cinemachineCameraTarget,
                         Transform _player, Animator _animator, GameObject _mainCamera,
                         PlayerInput _playerInput, CharacterController _controller,
-                        float _cinemachineTargetYaw, float _cinemachineTargetPitch, LayerMask groundLayers
+                        float _cinemachineTargetYaw, float _cinemachineTargetPitch, LayerMask groundLayers, float stamina
                     ) : base(_inputs,_cinemachineCameraTarget,_player, _animator, _mainCamera, _playerInput, _controller, 
-                        _cinemachineTargetYaw, _cinemachineTargetPitch, groundLayers)
+                        _cinemachineTargetYaw, _cinemachineTargetPitch, groundLayers, stamina)
     {
         // 在构造函数中，将 debugstr 命名为状态name
         name = States.BlendTreeMove;
@@ -408,23 +451,24 @@ public class BlendTreeMove : State
         {
             // 这样传值是能传过去的  inputs.jump = false;
             nextState = new JumpUp(inputs,CinemachineCameraTarget,player,animator,mainCamera,playerInput,
-                controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers);
+                controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers,Stamina);
             stage = Event.Exit;
         }
         // 转换到 FreeFall
         if (!Grounded)
         {
             nextState = new FreeFall(inputs,CinemachineCameraTarget,player,animator,mainCamera,playerInput,
-                controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers);
+                controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers,Stamina);
             stage = Event.Exit;
         }
         // 转换到 Stumble
         if (IsCollision)
         {
             nextState = new StumbleMove(inputs,CinemachineCameraTarget,player,animator,mainCamera,playerInput,
-                controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers);
+                controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers,Stamina);
             stage = Event.Exit;
         }
+        
     }
     
     public override void Exit() 
@@ -436,11 +480,11 @@ public class BlendTreeMove : State
 public class JumpUp : State
 {
     public JumpUp( StarterAssetsInputs _inputs, GameObject _cinemachineCameraTarget,
-                Transform _player, Animator _animator, GameObject _mainCamera,
-                PlayerInput _playerInput, CharacterController _controller,
-                float _cinemachineTargetYaw, float _cinemachineTargetPitch, LayerMask groundLayers
+                    Transform _player, Animator _animator, GameObject _mainCamera,
+                    PlayerInput _playerInput, CharacterController _controller,
+                    float _cinemachineTargetYaw, float _cinemachineTargetPitch, LayerMask groundLayers, float stamina
                 ) : base(_inputs,_cinemachineCameraTarget,_player, _animator, _mainCamera, _playerInput, _controller, 
-                _cinemachineTargetYaw, _cinemachineTargetPitch, groundLayers)
+                    _cinemachineTargetYaw, _cinemachineTargetPitch, groundLayers, stamina)
     {
         name = States.JumpUp;
     }
@@ -474,7 +518,7 @@ public class JumpUp : State
                 inputs.jump = false;
                 animator.SetBool(_animIDJump, false);
                 nextState = new FreeFall(inputs,CinemachineCameraTarget,player,animator,mainCamera,
-                    playerInput,controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers);
+                    playerInput,controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers,Stamina);
                 stage = Event.Exit;
             }
         }
@@ -496,9 +540,9 @@ public class FreeFall : State
     public FreeFall( StarterAssetsInputs _inputs, GameObject _cinemachineCameraTarget,
                     Transform _player, Animator _animator, GameObject _mainCamera,
                     PlayerInput _playerInput, CharacterController _controller,
-                    float _cinemachineTargetYaw, float _cinemachineTargetPitch, LayerMask groundLayers
-                    ) : base(_inputs,_cinemachineCameraTarget,_player, _animator, _mainCamera, _playerInput, _controller, 
-                    _cinemachineTargetYaw, _cinemachineTargetPitch, groundLayers)
+                    float _cinemachineTargetYaw, float _cinemachineTargetPitch, LayerMask groundLayers, float stamina
+                ) : base(_inputs,_cinemachineCameraTarget,_player, _animator, _mainCamera, _playerInput, _controller, 
+                    _cinemachineTargetYaw, _cinemachineTargetPitch, groundLayers, stamina)
     {
         name = States.FreeFall;
     }
@@ -538,7 +582,7 @@ public class FreeFall : State
             animator.SetBool(_animIDFreeFall, false);
             // 播放落地动画，播完后：
             nextState = new BlendTreeMove(inputs,CinemachineCameraTarget,player,animator,mainCamera,
-                playerInput,controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers);
+                playerInput,controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers,Stamina);
             stage = Event.Exit;
         }
 
@@ -552,12 +596,13 @@ public class FreeFall : State
 
 public class StumbleMove : State
 {
+    // private bool shouldGoFallDown = false;
     public StumbleMove( StarterAssetsInputs _inputs, GameObject _cinemachineCameraTarget,
                         Transform _player, Animator _animator, GameObject _mainCamera,
                         PlayerInput _playerInput, CharacterController _controller,
-                        float _cinemachineTargetYaw, float _cinemachineTargetPitch, LayerMask groundLayers
+                        float _cinemachineTargetYaw, float _cinemachineTargetPitch, LayerMask groundLayers, float stamina
                     ) : base(_inputs,_cinemachineCameraTarget,_player, _animator, _mainCamera, _playerInput, _controller, 
-                        _cinemachineTargetYaw, _cinemachineTargetPitch, groundLayers)
+                        _cinemachineTargetYaw, _cinemachineTargetPitch, groundLayers, stamina)
     {
         name = States.StumbleMove;
     }
@@ -567,19 +612,27 @@ public class StumbleMove : State
         base.Enter();
         Debug.Log("<color=yellow> [MSG] </color> States = " + name);
         IsStumble = true;
+        Stamina -= 30f;
+        SprintSpeed = MoveSpeed = 1f;
     }
 
     public override void Update()
     {
         base.Update();
-        if (AnimationStumbleFinish == 1) // 且动画播放完毕
+        if (AnimationStumbleFinish == 1 && Stamina > _staminaBoundary) // 且动画播放完毕
         {
             //Debug.Log("<color=yellow> 趔趄动画播放完毕 </color>");
             IsStumble = false;
             animator.SetBool(_animIDStumble, IsStumble);
             
             nextState = new BlendTreeMove(inputs,CinemachineCameraTarget,player,animator,mainCamera,playerInput,
-                controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers);
+                controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers,Stamina);
+            stage = Event.Exit;
+        }
+        else if (AnimationStumbleFinish == 1 && Stamina <= _staminaBoundary)
+        {
+            nextState = new FallDownAndGetUp(inputs,CinemachineCameraTarget,player,animator,mainCamera,playerInput,
+                controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers,Stamina);
             stage = Event.Exit;
         }
     }
@@ -587,7 +640,57 @@ public class StumbleMove : State
     public override void Exit() 
     {
         base.Exit();
-        Player._AnimationStumbleFinish = 0;
+        // 修正一些参数
+        Player.Instance._AnimationStumbleFinish = 0;
+        MoveSpeed = 2.0f; 
+        SprintSpeed = 5.5f;
+    }
+}
+
+public class FallDownAndGetUp : State
+{
+    public FallDownAndGetUp( StarterAssetsInputs _inputs, GameObject _cinemachineCameraTarget,
+        Transform _player, Animator _animator, GameObject _mainCamera,
+        PlayerInput _playerInput, CharacterController _controller,
+        float _cinemachineTargetYaw, float _cinemachineTargetPitch, LayerMask groundLayers, float stamina
+    ) : base(_inputs,_cinemachineCameraTarget,_player, _animator, _mainCamera, _playerInput, _controller, 
+        _cinemachineTargetYaw, _cinemachineTargetPitch, groundLayers, stamina)
+    {
+        name = States.FallDownAndGetUp;
+    }
+    
+    public override void Enter()
+    {
+        Debug.Log("<color=yellow> [MSG] </color> States = " + name);
+        base.Enter();
+        // Override
+        IsFallDown = true;
+        animator.SetBool(_animIDFallDown, IsFallDown);
+        SprintSpeed = MoveSpeed = 0.5f;
+    }
+
+    public override void Update()
+    {
+        base.Update();
+        if (AnimationFallDownFinish == 1)
+        {
+            IsFallDown = false;
+            IsStumble = false;
+            animator.SetBool(_animIDFallDown, IsFallDown);
+            animator.SetBool(_animIDStumble, IsStumble);
+            nextState = new BlendTreeMove(inputs,CinemachineCameraTarget,player,animator,mainCamera,playerInput,
+                controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers,Stamina);
+            stage = Event.Exit;
+        }
+    }
+    
+    public override void Exit() 
+    {
+        base.Exit();
+        // 阶段参数修正
+        Player.Instance._AnimationFallDownFinish = 0;
+        MoveSpeed = 2.0f; 
+        SprintSpeed = 5.5f;
     }
 }
 
