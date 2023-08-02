@@ -137,7 +137,7 @@ public class State
     private float _staminaAddRate = 0.9f;
     private float _staminaReduceRate = 0.5f;
     // 耐力阈值：用于判定是蹒跚or摔倒
-    protected float _staminaBoundary = 50f;
+    protected float _staminaBoundary = 35f;
     #endregion
     
     // 构造函数
@@ -612,7 +612,7 @@ public class StumbleMove : State
         base.Enter();
         Debug.Log("<color=yellow> [MSG] </color> States = " + name);
         IsStumble = true;
-        Stamina -= 30f;
+        Stamina -= 20f;
         SprintSpeed = MoveSpeed = 1f;
     }
 
