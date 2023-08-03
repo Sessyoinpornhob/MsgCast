@@ -64,6 +64,8 @@ public class Player : MonoBehaviour
     
     void Update() {
         currentState = currentState.Process();
+
+        //Debug.Log(TextManager.Instance.TextSearch("01", 1));
     }
 
     #region 碰撞部分函数
@@ -99,5 +101,20 @@ public class Player : MonoBehaviour
         _AnimationFallDownFinish = 1;
         Debug.Log("_AnimationFallDownFinish = " + _AnimationFallDownFinish);
     }
+    #endregion
+
+    #region Animation Event Camera Part
+    
+    // 针对相机震动和效果的AnimationEvent
+    public void CameraShakeStumble()
+    {
+        CameraShakes.Instance.ShakeCamera(0.8f,0.8f);
+    }
+    public void CameraShakeFallDown()
+    {
+        CameraShakes.Instance.ShakeCamera(2f,0.3f);
+    }
+    
+
     #endregion
 }

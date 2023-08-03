@@ -56,7 +56,7 @@ public class State
     // 加速减速
     protected float SpeedChangeRate = 10.0f;
     // 玩家跳跃高度
-    protected float JumpHeight = 1.5f;
+    protected float JumpHeight = 0.8f;
     // 玩家重力
     protected float Gravity = -15.0f;
     // 跳跃间隔
@@ -173,14 +173,14 @@ public class State
         VariablesTrack();
         GroundedCheck();
         CameraRotation();
-        if (!IsStumble)
+        if (IsStumble || IsFallDown)
         {
-            Move();
-            ManageStamina();
+            StumbleMove();
         }
         else
         {
-            StumbleMove();
+            Move();
+            ManageStamina();
         }
         stage = Event.Update;
     }
@@ -441,6 +441,8 @@ public class BlendTreeMove : State
     {
         Debug.Log("<color=yellow> [MSG] </color> States = " + name);
         base.Enter();
+        MoveSpeed = 2.0f; 
+        SprintSpeed = 5.5f;
     }
 
     public override void Update()
@@ -462,7 +464,7 @@ public class BlendTreeMove : State
             stage = Event.Exit;
         }
         // 转换到 Stumble
-        if (IsCollision)
+        if (IsCollision && inputs.sprint)
         {
             nextState = new StumbleMove(inputs,CinemachineCameraTarget,player,animator,mainCamera,playerInput,
                 controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers,Stamina);
@@ -612,28 +614,32 @@ public class StumbleMove : State
         base.Enter();
         Debug.Log("<color=yellow> [MSG] </color> States = " + name);
         IsStumble = true;
-        Stamina -= 20f;
         SprintSpeed = MoveSpeed = 1f;
     }
 
     public override void Update()
     {
         base.Update();
+        // 这个速度到底咋回事
+        Debug.Log("MoveSpeed = " + MoveSpeed);
+        
         if (AnimationStumbleFinish == 1 && Stamina > _staminaBoundary) // 且动画播放完毕
         {
             //Debug.Log("<color=yellow> 趔趄动画播放完毕 </color>");
             IsStumble = false;
             animator.SetBool(_animIDStumble, IsStumble);
             
+            MoveSpeed = 2.0f; 
+            SprintSpeed = 5.5f;
             nextState = new BlendTreeMove(inputs,CinemachineCameraTarget,player,animator,mainCamera,playerInput,
                 controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers,Stamina);
             stage = Event.Exit;
         }
         else if (AnimationStumbleFinish == 1 && Stamina <= _staminaBoundary)
         {
+            stage = Event.Exit;
             nextState = new FallDownAndGetUp(inputs,CinemachineCameraTarget,player,animator,mainCamera,playerInput,
                 controller,_cinemachineTargetYaw,_cinemachineTargetPitch,GroundLayers,Stamina);
-            stage = Event.Exit;
         }
     }
     
@@ -642,8 +648,6 @@ public class StumbleMove : State
         base.Exit();
         // 修正一些参数
         Player.Instance._AnimationStumbleFinish = 0;
-        MoveSpeed = 2.0f; 
-        SprintSpeed = 5.5f;
     }
 }
 
@@ -666,12 +670,15 @@ public class FallDownAndGetUp : State
         // Override
         IsFallDown = true;
         animator.SetBool(_animIDFallDown, IsFallDown);
-        SprintSpeed = MoveSpeed = 0.5f;
     }
 
     public override void Update()
     {
         base.Update();
+        SprintSpeed = MoveSpeed = 0.1f;
+        // 这个速度到底咋回事
+        Debug.Log("MoveSpeed = " + MoveSpeed);
+        
         if (AnimationFallDownFinish == 1)
         {
             IsFallDown = false;
@@ -689,8 +696,6 @@ public class FallDownAndGetUp : State
         base.Exit();
         // 阶段参数修正
         Player.Instance._AnimationFallDownFinish = 0;
-        MoveSpeed = 2.0f; 
-        SprintSpeed = 5.5f;
     }
 }
 
